@@ -11,6 +11,9 @@ target/
 .mvn
 .idea
 
+mvnw
+mvnw.cmd
+
 
 ### STS ###
 .apt_generated
