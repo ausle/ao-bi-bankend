@@ -1,5 +1,6 @@
 package com.ao.bi.controller;
 
+import cn.hutool.core.io.FileUtil;
 import com.ao.bi.annotation.AuthCheck;
 import com.ao.bi.api.CallApi;
 import com.ao.bi.common.BaseResponse;
@@ -10,6 +11,7 @@ import com.ao.bi.constant.CommonConstant;
 import com.ao.bi.constant.UserConstant;
 import com.ao.bi.exception.BusinessException;
 import com.ao.bi.exception.ThrowUtils;
+import com.ao.bi.manager.RedisLimiterManager;
 import com.ao.bi.model.dto.chart.*;
 import com.ao.bi.model.entity.Chart;
 import com.ao.bi.model.entity.User;
@@ -30,6 +32,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * 帖子接口
@@ -48,7 +52,8 @@ public class ChartController {
     @Resource
     private UserService userService;
 
-    private final static Gson GSON = new Gson();
+    @Resource
+    private RedisLimiterManager redisLimiterManager;
 
     // region 增删改查
     /**
@@ -194,10 +199,24 @@ public class ChartController {
         // 校验
         ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "分析目标为空");
         ThrowUtils.throwIf(StringUtils.isNotBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "名称过长");
+
+        // 校验文件大小，不允许超过1M
+        long size = multipartFile.getSize();
+        String originalFilename = multipartFile.getOriginalFilename();
+        final long ONE_MB = 1024 * 1024L;
+        ThrowUtils.throwIf(size > ONE_MB, ErrorCode.PARAMS_ERROR, "文件超过 1M");
+        // 校验文件后缀，只允许excel
+        String suffix = FileUtil.getSuffix(originalFilename);
+        final List<String> validFileSuffixList = Arrays.asList("xlsx", "xls");
+        ThrowUtils.throwIf(!validFileSuffixList.contains(suffix), ErrorCode.PARAMS_ERROR, "文件后缀非法");
+
         User loginUser = userService.getLoginUser(request);
+        // 某个用户调用此方法时，进行了限流（每秒两次）。
+        // 限流操作不影响该用户调用其他接口，也不影响其他用户调用此方法。
+        redisLimiterManager.doRateLimit("genChartByAi_" + loginUser.getId());
 
         // 构造用户输入
-        // 压缩后的数据
+        // 数据解析
         String csvData = ExcelUtils.excelToCsv(multipartFile);
         String aiMessage = CallApi.callApi(goal, chartType, csvData);
 
@@ -221,6 +240,8 @@ public class ChartController {
         biResponse.setChartId(chart.getId());
         return ResultUtils.success(biResponse);
     }
+
+
     /**
      * 编辑（用户）
      *
@@ -262,6 +283,7 @@ public class ChartController {
         Long id = chartQueryRequest.getId();
         String goal = chartQueryRequest.getGoal();
         String chartType = chartQueryRequest.getChartType();
+        String chartName = chartQueryRequest.getChartName();
         Long userId = chartQueryRequest.getUserId();
         String sortField = chartQueryRequest.getSortField();
         String sortOrder = chartQueryRequest.getSortOrder();
@@ -270,6 +292,7 @@ public class ChartController {
         queryWrapper.eq(StringUtils.isNotBlank(goal), "goal", goal);
         queryWrapper.eq(StringUtils.isNotBlank(chartType), "chartType", chartType);
         queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
+        queryWrapper.eq(ObjectUtils.isNotEmpty(chartName), "chartName", chartName);
         queryWrapper.eq("isDelete", false);
         queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
                 sortField);
