@@ -1,6 +1,7 @@
 package com.ao.bi.controller;
 
 import com.ao.bi.annotation.AuthCheck;
+import com.ao.bi.api.CallApi;
 import com.ao.bi.common.BaseResponse;
 import com.ao.bi.common.DeleteRequest;
 import com.ao.bi.common.ErrorCode;
@@ -9,14 +10,13 @@ import com.ao.bi.constant.CommonConstant;
 import com.ao.bi.constant.UserConstant;
 import com.ao.bi.exception.BusinessException;
 import com.ao.bi.exception.ThrowUtils;
-import com.ao.bi.model.dto.chart.ChartAddRequest;
-import com.ao.bi.model.dto.chart.ChartEditRequest;
-import com.ao.bi.model.dto.chart.ChartQueryRequest;
-import com.ao.bi.model.dto.chart.ChartUpdateRequest;
+import com.ao.bi.model.dto.chart.*;
 import com.ao.bi.model.entity.Chart;
 import com.ao.bi.model.entity.User;
+import com.ao.bi.model.vo.BiResponse;
 import com.ao.bi.service.ChartService;
 import com.ao.bi.service.UserService;
+import com.ao.bi.utils.ExcelUtils;
 import com.ao.bi.utils.SqlUtils;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -26,6 +26,7 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -50,7 +51,6 @@ public class ChartController {
     private final static Gson GSON = new Gson();
 
     // region 增删改查
-
     /**
      * 创建
      *
@@ -182,7 +182,45 @@ public class ChartController {
     }
 
     // endregion
+    @PostMapping("/gen")
+    public BaseResponse<BiResponse> genChartByAi(@RequestPart("file") MultipartFile multipartFile,
+                                                 GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
+        String name = genChartByAiRequest.getName();
+        // 分析的目标：告诉AI应该如何分析数据
+        String goal = genChartByAiRequest.getGoal();
+        // 图表类型
+        String chartType = genChartByAiRequest.getChartType();
 
+        // 校验
+        ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "分析目标为空");
+        ThrowUtils.throwIf(StringUtils.isNotBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "名称过长");
+        User loginUser = userService.getLoginUser(request);
+
+        // 构造用户输入
+        // 压缩后的数据
+        String csvData = ExcelUtils.excelToCsv(multipartFile);
+        String aiMessage = CallApi.callApi(goal, chartType, csvData);
+
+        String[] splits = aiMessage.split(CallApi.AOBI_CHAR);
+        String genChart = splits[0].trim();
+        String genResult = splits[1].trim();
+        // 插入到数据库
+        Chart chart = new Chart();
+        chart.setChartName(name);
+        chart.setGoal(goal);
+        chart.setChartData(csvData);
+        chart.setChartType(chartType);
+        chart.setGenChart(genChart);
+        chart.setGenResult(genResult);
+        chart.setUserId(loginUser.getId());
+        boolean saveResult = chartService.save(chart);
+        ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "图表保存失败");
+        BiResponse biResponse = new BiResponse();
+        biResponse.setGenChart(genChart);
+        biResponse.setGenResult(genResult);
+        biResponse.setChartId(chart.getId());
+        return ResultUtils.success(biResponse);
+    }
     /**
      * 编辑（用户）
      *

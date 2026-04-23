@@ -1,0 +1,9 @@
+{
+  "code": 0,
+  "data": {
+    "genChart": "AOBI\n```javascript\n{\n  tooltip: {\n    trigger: 'axis',\n    axisPointer: {\n      type: 'shadow'\n    }\n  },\n  legend: {\n    data: ['用户数']\n  },\n  grid: {\n    left: '3%',\n    right: '4%',\n    bottom: '3%',\n    containLabel: true\n  },\n  xAxis: [\n    {\n      type: 'category',\n      data: ['2024/10/19', '2025/1/11', '2026/4/11'],\n      axisTick: {\n        alignWithLabel: true\n      }\n    }\n  ],\n  yAxis: [\n    {\n      type: 'value'\n    }\n  ],\n  series: [\n    {\n      name: '用户数',\n      type: 'bar',\n      barWidth: '60%',\n      data: [1211, 988, 2000]\n    }\n  ]\n}\n```\n数据分析结论：\n1. 用户数在2024/10/19达到最高，为1211人。\n2. 用户数在2025/1/11下降到988人，降幅为18.6%。\n3. 用户数在2026/4/11回升至2000人，增长率为102.8%。\n4. 从整体趋势来看，用户数呈现先下降后上升的趋势，最终在2026/4/11达到最高值。\n5. 2025/1/11至2026/4/11期间，用户数增长显著，显示出用户数量在后期有大幅提升。",
+    "genResult": null,
+    "chartId": null
+  },
+  "message": "ok"
+}

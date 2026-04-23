@@ -1,11 +1,9 @@
 package com.ao.bi.aop;
 
-import com.ao.bi.common.ErrorCode;
 import com.ao.bi.model.entity.User;
 import com.ao.bi.model.enums.UserRoleEnum;
 import com.ao.bi.service.UserService;
 import com.ao.bi.annotation.AuthCheck;
-import com.ao.bi.exception.BusinessException;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -13,7 +11,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
