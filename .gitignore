@@ -39,3 +39,6 @@ Thumbs.db
 # Local override configs (keep template configs in git)
 application-local.yml
 application-local.yaml
+
+mvnw
+mvnw.cmd
