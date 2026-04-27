@@ -9,6 +9,7 @@ import com.ao.bi.common.ErrorCode;
 import com.ao.bi.common.ResultUtils;
 import com.ao.bi.constant.CommonConstant;
 import com.ao.bi.constant.UserConstant;
+import com.ao.bi.enums.StatusEnum;
 import com.ao.bi.exception.BusinessException;
 import com.ao.bi.exception.ThrowUtils;
 import com.ao.bi.manager.RedisLimiterManager;
@@ -34,6 +35,8 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * 帖子接口
@@ -241,6 +244,89 @@ public class ChartController {
         return ResultUtils.success(biResponse);
     }
 
+
+    @Resource
+    private ThreadPoolExecutor threadPoolExecutor;
+
+
+    @PostMapping("/gen/async")
+    public BaseResponse<BiResponse> genAsyncChartByAi(@RequestPart("file") MultipartFile multipartFile,
+                                                 GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
+        String name = genChartByAiRequest.getName();
+        // 分析的目标：告诉AI应该如何分析数据
+        String goal = genChartByAiRequest.getGoal();
+        // 图表类型
+        String chartType = genChartByAiRequest.getChartType();
+
+        // 校验
+        ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "分析目标为空");
+        ThrowUtils.throwIf(StringUtils.isNotBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "名称过长");
+
+        // 校验文件大小，不允许超过1M
+        long size = multipartFile.getSize();
+        String originalFilename = multipartFile.getOriginalFilename();
+        final long ONE_MB = 1024 * 1024L;
+        ThrowUtils.throwIf(size > ONE_MB, ErrorCode.PARAMS_ERROR, "文件超过 1M");
+        // 校验文件后缀，只允许excel
+        String suffix = FileUtil.getSuffix(originalFilename);
+        final List<String> validFileSuffixList = Arrays.asList("xlsx", "xls");
+        ThrowUtils.throwIf(!validFileSuffixList.contains(suffix), ErrorCode.PARAMS_ERROR, "文件后缀非法");
+
+        User loginUser = userService.getLoginUser(request);
+        // 某个用户调用此方法时，进行了限流（每秒两次）。
+        // 限流操作不影响该用户调用其他接口，也不影响其他用户调用此方法。
+        redisLimiterManager.doRateLimit("genChartByAi_" + loginUser.getId());
+        String csvData = ExcelUtils.excelToCsv(multipartFile);
+
+        // 先保存图表数据到数据库
+        Chart chart = new Chart();
+        chart.setChartName(name);
+        chart.setGoal(goal);
+        chart.setChartData(csvData);
+        chart.setChartType(chartType);
+        chart.setStatus(StatusEnum.WAIT.getValue());
+        chart.setUserId(loginUser.getId());
+        boolean saveResult = chartService.save(chart);
+        ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "图表保存失败");
+
+        CompletableFuture.runAsync(() -> {
+            Chart updateChart = new Chart();
+            updateChart.setId(chart.getId());
+            updateChart.setStatus(StatusEnum.RUNNING.getValue());
+            boolean b = chartService.updateById(updateChart);
+            if (!b) {
+                handleChartUpdateError(chart.getId(), "更新图表执行中状态失败");
+                return;
+            }
+            String aiMessage = CallApi.callApi(goal, chartType, csvData);
+            String[] splits = aiMessage.split(CallApi.AOBI_CHAR);
+            String genChart = splits[0].trim();
+            String genResult = splits[1].trim();
+
+            Chart updateChartResult = new Chart();
+            updateChartResult.setGenChart(genChart);
+            updateChartResult.setGenResult(genResult);
+            updateChartResult.setId(chart.getId());
+            updateChartResult.setStatus(StatusEnum.SUCCESS.getValue());
+            boolean updateResult = chartService.updateById(updateChartResult);
+            if (!updateResult) {
+                handleChartUpdateError(chart.getId(), "更新图表成功状态失败");
+            }
+        },threadPoolExecutor);
+        BiResponse biResponse = new BiResponse();
+        biResponse.setChartId(chart.getId());
+        return ResultUtils.success(biResponse);
+    }
+
+    private void handleChartUpdateError(long chartId, String execMessage) {
+        Chart updateChartResult = new Chart();
+        updateChartResult.setId(chartId);
+        updateChartResult.setStatus(StatusEnum.FAIL.getValue());
+        boolean updateResult = chartService.updateById(updateChartResult);
+        if (!updateResult) {
+            log.error("更新图表失败状态失败" + chartId + "," + execMessage);
+        }
+    }
 
     /**
      * 编辑（用户）

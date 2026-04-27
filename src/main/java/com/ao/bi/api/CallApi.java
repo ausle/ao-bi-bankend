@@ -12,7 +12,7 @@ import java.util.Map;
 
 public class CallApi {
 
-    private static final String API_KEY = "";
+    private static final String API_KEY = "sk-api-Iv-0IFMWdThB3DMv5pZ39L3HeVhDi0_k3EJqhSTTGIvSxH8n5_c-xTKrrpNBl77HmqnL2It0g40oONokekeFUa_jd7X_QoLK9lVCFiSKakkyFQr23mB1-Co";
     /*
         参考文档：https://platform.minimaxi.com/document/%E5%AF%B9%E8%AF%9D?key=36954880539f4e2ab8b13067
      */

@@ -70,6 +70,9 @@ public class Chart implements Serializable {
     @TableLogic
     private Integer isDelete;
 
+    private String status;
+
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }
